@@ -1,0 +1,35 @@
+from pathlib import Path
+
+from src.preprocessing import DNADataPreprocessor
+
+
+# Directorio raíz del proyecto
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+# Rutas
+INPUT_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "raw"
+    / "dataset_dna_demanda_b1.csv"
+)
+
+OUTPUT_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+)
+
+
+def main():
+
+    preprocessor = DNADataPreprocessor(
+        input_file=INPUT_FILE,
+        output_dir=OUTPUT_DIR
+    )
+
+    preprocessor.run()
+
+
+if __name__ == "__main__":
+    main()

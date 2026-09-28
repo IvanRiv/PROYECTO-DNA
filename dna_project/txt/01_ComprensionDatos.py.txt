@@ -1,0 +1,32 @@
+from pathlib import Path
+
+from src.eda import DNADataEDA
+
+
+def main():
+
+    project_root = Path(__file__).resolve().parent
+
+    input_file = (
+        project_root
+        / "data"
+        / "raw"
+        / "dataset_dna_demanda_b1.csv"
+    )
+
+    output_dir = (
+        project_root
+        / "reports"
+        / "figures"
+    )
+
+    eda = DNADataEDA(
+        input_file=input_file,
+        output_dir=output_dir
+    )
+
+    eda.run()
+
+
+if __name__ == "__main__":
+    main()

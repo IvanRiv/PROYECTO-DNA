@@ -1,0 +1,6 @@
+Modelo,Umbral (th),Accuracy,Precision,Recall,F1-Score,ROC-AUC,Seleccionado_en_Val
+Random Forest (th = 0.30),0.3,0.5928,0.0884,0.7193,0.1574,0.7279,False
+Random Forest (th = 0.35),0.35,0.6883,0.1003,0.614,0.1724,0.7279,False
+Random Forest (th = 0.40),0.4,0.7403,0.1142,0.5789,0.1908,0.7279,False
+Random Forest (th = 0.45),0.45,0.7922,0.1256,0.4912,0.2,0.7279,True
+Random Forest (th = 0.50),0.5,0.8117,0.1158,0.386,0.1781,0.7279,False

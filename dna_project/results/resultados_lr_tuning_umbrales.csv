@@ -1,0 +1,6 @@
+Modelo,Umbral (th),Accuracy,Precision,Recall,F1-Score,ROC-AUC,Seleccionado_en_Val
+Regresión Logística (th = 0.30),0.3,0.5241,0.087,0.8421,0.1576,0.8342,False
+Regresión Logística (th = 0.35),0.35,0.705,0.1324,0.8246,0.2282,0.8342,False
+Regresión Logística (th = 0.40),0.4,0.769,0.162,0.807,0.2698,0.8342,False
+Regresión Logística (th = 0.45),0.45,0.8293,0.1991,0.7368,0.3134,0.8342,False
+Regresión Logística (th = 0.50),0.5,0.846,0.2086,0.6842,0.3197,0.8342,True

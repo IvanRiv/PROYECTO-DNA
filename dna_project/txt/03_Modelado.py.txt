@@ -1,0 +1,208 @@
+from pathlib import Path
+
+import pandas as pd
+
+from sklearn.model_selection import TimeSeriesSplit
+
+from models.logistic_regression_model import (
+    LogisticRegressionModel
+)
+
+from models.random_forest_model import (
+    RandomForestModel
+)
+
+from models.xgboost_model import (
+    XGBoostModel
+)
+
+from models.neural_network_model import (
+    NeuralNetworkModel
+)
+
+from modeling.model_trainer import (
+    ModelTrainer
+)
+
+from modeling.model_evaluator import (
+    ModelEvaluator
+)
+
+from modeling.model_comparator import (
+    ModelComparator
+)
+
+from modeling.roc_plotter import (
+    ROCCurvePlotter
+)
+
+
+def main():
+
+    # ==================================================
+    # RUTAS
+    # ==================================================
+
+    project_root = Path(__file__).resolve().parent
+
+    data_dir = (
+        project_root
+        / "data"
+        / "processed"
+    )
+
+    results_dir = (
+        project_root
+        / "results"
+    )
+
+    results_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # ==================================================
+    # 1. CARGA DE DATOS
+    # ==================================================
+
+    print("Cargando datos preparados...")
+
+    X_train = pd.read_csv(
+        data_dir / "X_train.csv"
+    )
+
+    y_train = pd.read_csv(
+        data_dir / "y_train.csv"
+    ).values.ravel()
+
+    X_test = pd.read_csv(
+        data_dir / "X_test.csv"
+    )
+
+    y_test = pd.read_csv(
+        data_dir / "y_test.csv"
+    ).values.ravel()
+
+    # ==================================================
+    # 2. VALIDACIÓN TEMPORAL
+    # ==================================================
+
+    tscv = TimeSeriesSplit(
+        n_splits=3
+    )
+
+    # ==================================================
+    # 3. BALANCEO XGBOOST
+    # ==================================================
+
+    positivos = y_train.sum()
+
+    negativos = (
+        len(y_train) - positivos
+    )
+
+    scale_pos_weight = (
+        negativos / positivos
+    )
+
+    # ==================================================
+    # 4. SELECCIÓN DE MODELOS
+    # ==================================================
+
+    modelos = [
+
+        LogisticRegressionModel(),
+
+        RandomForestModel(),
+
+        XGBoostModel(
+            scale_pos_weight=scale_pos_weight
+        ),
+
+        NeuralNetworkModel()
+
+    ]
+
+    # ==================================================
+    # 5. OBJETOS DE TRABAJO
+    # ==================================================
+
+    trainer = ModelTrainer(
+        cv=tscv,
+        scoring="f1",
+        n_jobs=-1
+    )
+
+    evaluator = ModelEvaluator()
+
+    comparator = ModelComparator()
+
+    roc_plotter = ROCCurvePlotter()
+
+    # ==================================================
+    # 6. ENTRENAMIENTO + TUNING + EVALUACIÓN
+    # ==================================================
+
+    print(
+        "\n--- INICIANDO FLUJO DE MODELADO 7.4 ---"
+    )
+
+    for model in modelos:
+
+        trained_model = trainer.fit(
+            model,
+            X_train,
+            y_train
+        )
+
+        # Evaluar en test 2025
+        result = evaluator.evaluate(
+            trained_model,
+            X_test,
+            y_test
+        )
+
+        # Guardar resultado
+        comparator.add_result(
+            result
+        )
+
+        # Agregar curva ROC
+        roc_plotter.add_model(
+            trained_model,
+            X_test,
+            y_test
+        )
+
+    # ==================================================
+    # 7. GUARDAR CURVA ROC
+    # ==================================================
+
+    roc_plotter.save(
+        results_dir
+        / "curvas_roc_7_4.png"
+    )
+
+    # ==================================================
+    # 8. COMPARACIÓN
+    # ==================================================
+
+    comparator.print_results()
+
+    # ==================================================
+    # 9. EXPORTAR RESULTADOS
+    # ==================================================
+
+    comparator.save_results(
+        results_dir
+        / "resultados_modelado_7_4.csv"
+    )
+
+    print(
+        "\n[OK] Gráfica y tabla generadas "
+        "con éxito."
+    )
+
+
+if __name__ == "__main__":
+    main()

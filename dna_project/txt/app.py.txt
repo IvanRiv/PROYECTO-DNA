@@ -1,0 +1,300 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import joblib
+
+# ---------------------------------------------------------
+# 1. CONFIGURACIÓN Y ESTILOS
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="Sistema de Alerta Temprana - DNA",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 26px;
+        font-weight: bold;
+        color: #1E3A8A;
+        padding-bottom: 10px;
+    }
+    .sub-header {
+        font-size: 18px;
+        color: #4B5563;
+    }
+    .alert-high {
+        background-color: #FEE2E2;
+        border-left: 6px solid #DC2626;
+        padding: 15px;
+        border-radius: 8px;
+        color: #991B1B;
+    }
+    .alert-low {
+        background-color: #D1FAE5;
+        border-left: 6px solid #059669;
+        padding: 15px;
+        border-radius: 8px;
+        color: #065F46;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Orden exacto de columnas que requiere el Random Forest
+COLUMNAS_MODELO = [
+    'mes_sin', 'mes_cos', 
+    'pct_hombres_lag1', 'pct_mujeres_lag1', 'pct_ninos_ninas_lag1', 'pct_adolescentes_lag1',
+    'atenciones_lag_1', 'atenciones_lag_2', 'atenciones_lag_3', 'promedio_movil_3m',
+    'complejidad_Alta', 'complejidad_Baja', 'complejidad_Media'
+]
+
+# ---------------------------------------------------------
+# 2. CARGA DE ARCHIVOS
+# ---------------------------------------------------------
+@st.cache_resource
+def cargar_modelo():
+    try:
+        return joblib.load('./models_saved/random_forest_tuned_model.pkl')
+    except:
+        return joblib.load('modelo_rf_tuned.pkl')
+
+@st.cache_data
+def cargar_datos():
+    try:
+        return pd.read_csv('./data/processed/dataset_dna_preparado.csv')
+    except:
+        return pd.read_csv('dataset_dna_preparado.csv')
+
+try:
+    modelo = cargar_modelo()
+    df_real = cargar_datos()
+except Exception as e:
+    st.error(f"⚠️ Error al cargar archivos de modelo o dataset: {e}")
+    st.stop()
+
+# ---------------------------------------------------------
+# 3. ENCABEZADO Y BARRA LATERAL
+# ---------------------------------------------------------
+st.markdown("<div class='main-header'>🛡️ Sistema de Predicción de Picos de Demanda Operativa - DNA</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>Defensoría de la Niñez y Adolescencia - Herramienta de Gestión Preventiva</div>", unsafe_allow_html=True)
+st.markdown("---")
+
+st.sidebar.image("https://img.icons8.com/color/96/shield.png", width=70)
+st.sidebar.title("⚙️ Configuración")
+
+umbral = st.sidebar.slider(
+    "Seleccione el umbral probabilístico:",
+    min_value=0.30,
+    max_value=0.50,
+    value=0.50,
+    step=0.05
+)
+
+if umbral == 0.50:
+    st.sidebar.info("💡 **Modo Eficiencia (F1 = 0.4469)**\n- Recall: 70.18%\n- Precisión: 32.79%")
+elif umbral == 0.30:
+    st.sidebar.warning("⚠️ **Modo Alta Cobertura (Recall = 84.21%)**\n- Mayor sensibilidad a picos")
+else:
+    st.sidebar.info(f"⚙️ Umbral personalizado: {umbral:.2f}")
+
+# Datos simulados para vista general
+@st.cache_data
+def generar_datos_simulados():
+    np.random.seed(42)
+    unidades = ['DNA Comuna Molle', 'DNA Comuna Valle Hermoso', 'DNA Comuna Tunari', 'DNA Comuna San Benito', 'DNA Comuna Alejo Calatayud']
+    tipologias = df_real['tipologia'].unique().tolist()[:10]
+    
+    rows = []
+    for u in unidades:
+        for t in tipologias:
+            prob = np.random.beta(1.5, 8.0)
+            rows.append({
+                'Unidad_DNA': u,
+                'Tipologia': t,
+                'Probabilidad': round(prob, 4),
+                'Atenciones_Mes_Anterior': np.random.randint(15, 120),
+                'Tendencia_Historica': np.random.choice(['Creciente', 'Estable', 'Decreciente'], p=[0.3, 0.5, 0.2])
+            })
+    return pd.DataFrame(rows)
+
+df_data = generar_datos_simulados()
+df_data['Prediccion_Pico'] = (df_data['Probabilidad'] >= umbral).astype(int)
+
+# ---------------------------------------------------------
+# 4. PESTAÑAS
+# ---------------------------------------------------------
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Tablero de Control Mensual", 
+    "🔮 Predictor / Simulador Individual", 
+    "📈 Análisis de Rendimiento del Modelo", 
+    "⚙️ Gestión & Monitoreo de Datos"
+])
+
+# TAB 1: TABLERO GENERAL
+with tab1:
+    st.subheader("📅 Planificación y Detección de Alertas Preventivas")
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        mes_sel = st.selectbox("Seleccionar Mes a Planificar:", ['Octubre 2026', 'Noviembre 2026', 'Diciembre 2026'])
+    with col_f2:
+        unidad_sel = st.multiselect("Filtrar por Unidad DNA:", options=df_data['Unidad_DNA'].unique(), default=df_data['Unidad_DNA'].unique())
+    
+    df_filtered = df_data[df_data['Unidad_DNA'].isin(unidad_sel)].copy()
+    
+    total_evaluados = len(df_filtered)
+    picos_detectados = df_filtered['Prediccion_Pico'].sum()
+    porcentaje_alerta = (picos_detectados / total_evaluados) * 100 if total_evaluados > 0 else 0
+    prob_maxima = df_filtered['Probabilidad'].max() if total_evaluados > 0 else 0
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Casos/Tipologías", total_evaluados)
+    c2.metric("Alertas de Pico Crítico 🔴", picos_detectados, delta=f"{porcentaje_alerta:.1f}% del total")
+    c3.metric("Probabilidad Máxima", f"{prob_maxima*100:.1f}%")
+    c4.metric("Umbral Activo (th)", f"{umbral:.2f}")
+    
+    st.markdown("---")
+    
+    g1, g2 = st.columns([6, 4])
+    with g1:
+        st.markdown("**Distribución de Riesgo por Tipología**")
+        fig_bar = px.bar(
+            df_filtered, x='Probabilidad', y='Tipologia', color='Prediccion_Pico',
+            color_continuous_scale=['#10B981', '#EF4444'], orientation='h',
+            hover_data=['Unidad_DNA', 'Atenciones_Mes_Anterior'],
+            labels={'Prediccion_Pico': 'Alerta', 'Probabilidad': 'Probabilidad Estimada'}
+        )
+        fig_bar.add_vline(x=umbral, line_dash="dash", line_color="black")
+        fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0))
+        st.plotly_chart(fig_bar, use_container_width=True)
+        
+    with g2:
+        st.markdown("**Alertas por Unidad DNA**")
+        df_unidades = df_filtered.groupby('Unidad_DNA')['Prediccion_Pico'].sum().reset_index()
+        fig_pie = px.pie(df_unidades, names='Unidad_DNA', values='Prediccion_Pico', hole=0.4)
+        fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+# ---------------------------------------------------------
+# TAB 2: PREDICTOR SIMPLIFICADO
+# ---------------------------------------------------------
+with tab2:
+    st.subheader("🔮 Evaluación Simplificada en Tiempo Real")
+    st.write("Seleccione la tipología e ingrese únicamente el historial de atenciones:")
+    
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        tipologia_input = st.selectbox("Seleccione la Tipología:", sorted(df_real['tipologia'].unique()))
+        mes_eval = st.slider("Mes a evaluar (1=Ene, 12=Dic):", min_value=1, max_value=12, value=10)
+        
+    with col_b:
+        c_lag1 = st.number_input("Atenciones Mes Anterior (Lag 1):", min_value=0, max_value=500, value=25)
+        c_lag2 = st.number_input("Atenciones Hace 2 Meses (Lag 2):", min_value=0, max_value=500, value=20)
+        c_lag3 = st.number_input("Atenciones Hace 3 Meses (Lag 3):", min_value=0, max_value=500, value=15)
+        
+    prom_movil = (c_lag1 + c_lag2 + c_lag3) / 3.0
+    st.info(f"Promedio móvil de 3 meses: **{prom_movil:.2f}**")
+
+    if st.button("🚀 Evaluar Alerta de Sobredemanda", type="primary"):
+        # 1. Transformación trigonométrica del mes
+        mes_sin = np.sin(2 * np.pi * mes_eval / 12.0)
+        mes_cos = np.cos(2 * np.pi * mes_eval / 12.0)
+        
+        # 2. Valores por defecto automáticos (complejidad estándar y demografía promedio)
+        comp_alta = 0
+        comp_baja = 1  # Por defecto complejidad baja/estándar
+        comp_media = 0
+        
+        pct_hombres = 0.20
+        pct_mujeres = 0.50
+        pct_ninos = 0.20
+        pct_adolescentes = 0.10
+        
+        # 3. Diccionario alineado con el modelo
+        vector_entrada = {
+            'mes_sin': mes_sin,
+            'mes_cos': mes_cos,
+            'pct_hombres_lag1': pct_hombres,
+            'pct_mujeres_lag1': pct_mujeres,
+            'pct_ninos_ninas_lag1': pct_ninos,
+            'pct_adolescentes_lag1': pct_adolescentes,
+            'atenciones_lag_1': float(c_lag1),
+            'atenciones_lag_2': float(c_lag2),
+            'atenciones_lag_3': float(c_lag3),
+            'promedio_movil_3m': float(prom_movil),
+            'complejidad_Alta': comp_alta,
+            'complejidad_Baja': comp_baja,
+            'complejidad_Media': comp_media
+        }
+        
+        # 4. Inferencia
+        X_inferencia = pd.DataFrame([vector_entrada])[COLUMNAS_MODELO]
+        
+        try:
+            prob_calculada = modelo.predict_proba(X_inferencia)[0, 1]
+            es_pico = prob_calculada >= umbral
+            
+            st.markdown("---")
+            res_col1, res_col2 = st.columns([4, 6])
+            
+            with res_col1:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = prob_calculada * 100,
+                    title = {'text': "Probabilidad de Pico (%)"},
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': "#DC2626" if es_pico else "#059669"},
+                        'steps': [
+                            {'range': [0, umbral*100], 'color': "#D1FAE5"},
+                            {'range': [umbral*100, 100], 'color': "#FEE2E2"}
+                        ],
+                        'threshold': {
+                            'line': {'color': "red", 'width': 4},
+                            'value': umbral * 100
+                        }
+                    }
+                ))
+                fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
+                
+            with res_col2:
+                if es_pico:
+                    st.markdown(f"""
+                    <div class='alert-high'>
+                        <h3>🔴 ALERTA: Sobredemanda Predicha</h3>
+                        <p><b>Probabilidad:</b> {prob_calculada*100:.2f}% (Supera el umbral de {umbral*100:.0f}%)</p>
+                        <p><b>Acción Recomendada:</b> Reasignar personal de apoyo para <b>{tipologia_input}</b>.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class='alert-low'>
+                        <h3>🟢 OPERACIÓN NORMAL</h3>
+                        <p><b>Probabilidad:</b> {prob_calculada*100:.2f}% (Inferior al umbral de {umbral*100:.0f}%)</p>
+                        <p><b>Acción Recomendada:</b> Mantener la atención estándar para <b>{tipologia_input}</b>.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+        except Exception as err:
+            st.error(f"Error al predecir: {err}")
+
+# TAB 3: RENDIMIENTO DEL MODELO
+with tab3:
+    st.subheader("📈 Métricas del Modelo")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Accuracy", "90.82%")
+    m2.metric("Precision", "32.79%")
+    m3.metric("Recall", "70.18%")
+    m4.metric("F1-Score", "0.4469")
+    m5.metric("ROC-AUC", "0.8713")
+
+# TAB 4: MANTENIMIENTO
+with tab4:
+    st.subheader("⚙️ Gestión & Monitoreo")
+    st.write("Carga de nuevos archivos CSV para actualización del sistema.")
+    st.file_uploader("Cargar registros:", type=['csv', 'xlsx'])

@@ -1,0 +1,127 @@
+from pathlib import Path
+import time
+import joblib
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score
+)
+from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+
+from models.random_forest_tuning_model import RandomForestTuningModel
+
+
+def main():
+    # ==================================================
+    # 1. RUTAS Y CARGA DE DATOS
+    # ==================================================
+    project_root = Path(__file__).resolve().parent
+    data_dir = project_root / "data" / "processed"
+    results_dir = project_root / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = project_root / "models_saved"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Cargando datos...")
+    X_train = pd.read_csv(data_dir / "X_train.csv")
+    y_train = pd.read_csv(data_dir / "y_train.csv").values.ravel()
+    X_test = pd.read_csv(data_dir / "X_test.csv")
+    y_test = pd.read_csv(data_dir / "y_test.csv").values.ravel()
+
+    # ==================================================
+    # 2. VALIDACIÓN TEMPORAL Y MODELO
+    # ==================================================
+    tscv = TimeSeriesSplit(n_splits=3)
+    rf_tuning_model = RandomForestTuningModel()
+
+    print(f"\nIniciando GridSearch Extendido para: {rf_tuning_model.get_name()}...")
+    start_time = time.time()
+
+    pipeline = rf_tuning_model.create_pipeline()
+    param_grid = rf_tuning_model.get_param_grid()
+
+    grid = GridSearchCV(
+        estimator=pipeline,
+        param_grid=param_grid,
+        cv=tscv,
+        scoring="f1",
+        n_jobs=-1
+    )
+
+    grid.fit(X_train, y_train)
+    train_time = round(time.time() - start_time, 2)
+
+    best_pipeline = grid.best_estimator_
+    print(f"[OK] Entrenamiento finalizado en {train_time} s")
+    print(f"Mejores hiperparámetros: {grid.best_params_}")
+
+    # ==================================================
+    # 3. EVALUACIÓN Y AJUSTE DE UMBRALES (th in [0.30, 0.50])
+    # ==================================================
+    # Obtener las probabilidades de la clase positiva (1)
+    y_proba = best_pipeline.predict_proba(X_test)[:, 1]
+
+    # Probar umbrales entre 0.30 y 0.50 con paso de 0.05
+    thresholds = [0.30, 0.35, 0.40, 0.45, 0.50]
+    results_thresholds = []
+
+    print("\n--- EVALUACIÓN POR UMBRAL DE DECISIÓN (TEST 2025) ---")
+
+    for th in thresholds:
+        # Clasificar según el umbral actual
+        y_pred_th = (y_proba >= th).astype(int)
+
+        accuracy = accuracy_score(y_test, y_pred_th)
+        precision = precision_score(y_test, y_pred_th, zero_division=0)
+        recall = recall_score(y_test, y_pred_th, zero_division=0)
+        f1 = f1_score(y_test, y_pred_th, zero_division=0)
+        roc_auc = roc_auc_score(y_test, y_proba)  # Permanecerá constante ya que usa las probabilidades
+
+        res = {
+            "Modelo": f"Random Forest (th = {th:.2f})",
+            "Umbral (th)": th,
+            "Accuracy": round(accuracy, 4),
+            "Precision": round(precision, 4),
+            "Recall": round(recall, 4),
+            "F1-Score": round(f1, 4),
+            "ROC-AUC": round(roc_auc, 4),
+            "Tiempo (s)": train_time,
+            "Hiperparametros Optimos": str(grid.best_params_)
+        }
+        results_thresholds.append(res)
+
+    # Convertir resultados a DataFrame
+    df_results = pd.DataFrame(results_thresholds).sort_values(by="F1-Score", ascending=False)
+
+    # ==================================================
+    # 4. IMPRESIÓN Y EXPORTACIÓN DE RESULTADOS
+    # ==================================================
+    print("\n" + "=" * 85)
+    print("RESULTADOS OPTIMIZADOS RANDOM FOREST (TUNING + UMBRALES)")
+    print("=" * 85)
+    cols = ["Modelo", "Accuracy", "Precision", "Recall", "F1-Score", "ROC-AUC"]
+    print(df_results[cols].to_string(index=False))
+
+    output_path = results_dir / "resultados_rf_tuning_umbrales.csv"
+    df_results.to_csv(output_path, index=False)
+    print(f"\n[OK] Resultados detallados guardados en: {output_path}")
+
+    # Obtener y mostrar la mejor fila
+    best_row = df_results.iloc[0]
+    print(f"\n[+] Umbral Óptimo Seleccionado: th = {best_row['Umbral (th)']}")
+    print(f"    Recall: {best_row['Recall']} | Precision: {best_row['Precision']} | F1-Score: {best_row['F1-Score']}")
+
+    # ==================================================
+    # 5. GUARDAR MODELO
+    # ==================================================
+    pkl_path = models_dir / "random_forest_tuned_model.pkl"
+    joblib.dump(best_pipeline, pkl_path)
+    print(f"[OK] Modelo exportado exitosamente en: {pkl_path}")
+
+if __name__ == "__main__":
+    main()

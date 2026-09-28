@@ -1,0 +1,5 @@
+Modelo,Accuracy,Precision,Recall,F1-Score,ROC-AUC,Tiempo (s),Hiperparametros Optimos
+Red Neuronal (MLP),0.949,0.5143,0.3214,0.3956,0.769,4.35,"{'clf__alpha': 0.0001, 'clf__hidden_layer_sizes': (32, 16)}"
+Regresion Logistica,0.9545,0.7059,0.2143,0.3288,0.8277,0.23,"{'clf__C': 1.0, 'clf__solver': 'lbfgs'}"
+Random Forest,0.8098,0.1366,0.5,0.2146,0.7462,2.89,"{'clf__max_depth': None, 'clf__min_samples_split': 2, 'clf__n_estimators': 100}"
+XGBoost,0.8024,0.1133,0.4107,0.1776,0.6695,1.09,"{'clf__learning_rate': 0.1, 'clf__max_depth': 6, 'clf__n_estimators': 100}"
